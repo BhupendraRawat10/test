@@ -59,7 +59,7 @@ $query = isset($_GET['query']) ? $_GET['query'] : '';
 if ($query !== '') {
     $pokemonData = fetchPokemonData($query);
     if (!$pokemonData) {
-        $error = "❌ Pokémon not found.";
+        $error = "X Pokémon not found.";
     }
 }
 ?>
