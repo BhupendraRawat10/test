@@ -1,96 +1,244 @@
 <?php
-// test the Pokémon info code 
-function fetchPokemonData($pokemon)
-{
-    $url = "https://pokeapi.co/api/v2/pokemon/" . strtolower($pokemon);
-    
-    $response = @file_get_contents($url);
-    
+function fetchPokemonList() {
+    $cacheFile = __DIR__ . '/pokemon_list_cache.json';
+    $cacheTime = 86400; // 1 day
 
-// dd($response);
-
-    return json_decode($response, true);
-}
-
-$pokemon = isset($_GET['pokemon']) ? trim($_GET['pokemon']) : 'pikachu';
-
-$data = fetchPokemonData($pokemon);
-// dd($data);
-if (!$data) {
-    $error = "Pokémon not found! Try again.";
-} else {
-
-    $name = ucfirst($data['name']); 
-    $id = $data['id'];
-    $image = $data['sprites']['front_default'];
-    $types = [];
-    foreach ($data['types'] as $type) {
-        $types[] = ucfirst($type['type']['name']); 
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTime) {
+        return json_decode(file_get_contents($cacheFile), true);
     }
 
-    $stats = [];
-    foreach ($data['stats'] as $stat) {
-        $stats[$stat['stat']['name']] = $stat['base_stat'];
+    $url = "https://pokeapi.co/api/v2/pokemon?limit=151";
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 5
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    if ($response) {
+        file_put_contents($cacheFile, $response);
+        return json_decode($response, true);
     }
-//    dd($stats);
-    $prevId = max(1, $id - 1); 
-    $nextId = $id + 1;
+
+    return null;
 }
 
+function fetchPokemonData($query) {
+    $query = strtolower(trim($query));
+    $cacheFile = __DIR__ . "/cache_" . md5($query) . ".json";
+    $cacheTime = 3600; // 1 hour
+
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTime) {
+        return json_decode(file_get_contents($cacheFile), true);
+    }
+
+    $url = "https://pokeapi.co/api/v2/pokemon/" . urlencode($query);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 5,
+        CURLOPT_FAILONERROR => true
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    if ($response) {
+        file_put_contents($cacheFile, $response);
+        return json_decode($response, true);
+    }
+
+    return null;
+}
+
+$pokemonList = fetchPokemonList();
+$pokemonData = null;
+$error = '';
+$query = isset($_GET['query']) ? $_GET['query'] : '';
+
+if ($query !== '') {
+    $pokemonData = fetchPokemonData($query);
+    if (!$pokemonData) {
+        $error = "❌ Pokémon not found.";
+    }
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pokémon Info App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background-color: #f8f8f8; }
-        .container { width: 50%; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); }
-        img { width: 150px; height: 150px; }
-        .stats { text-align: left; display: inline-block; margin-top: 10px; }
-        .search-box { margin-bottom: 20px; }
-        input { padding: 8px; width: 200px; border-radius: 5px; border: 1px solid #ccc; }
-        button { padding: 8px 12px; border: none; background:rgb(130, 204, 233); color: black; cursor: pointer; border-radius: 5px; }
-        .nav { margin-top: 20px; }
-        .nav a { text-decoration: none; padding: 8px 12px; background:rgb(146, 175, 206); color: white; border-radius: 5px; margin: 5px; }
-        .error { color: red; font-weight: bold; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(to right, #f2fcfe, #1c92d2);
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 720px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 30px 25px;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #1c92d2;
+            margin-bottom: 25px;
+        }
+
+        form {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 25px;
+        }
+
+        select {
+            width: 100%;
+            max-width: 300px;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        .error {
+            color: #d9534f;
+            font-weight: bold;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .pokemon-card {
+            text-align: center;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 12px;
+        }
+
+        .pokemon-card img {
+            max-width: 180px;
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+
+        .pokemon-card img:hover {
+            transform: scale(1.05);
+        }
+
+        h2 {
+            margin: 10px 0 5px;
+            color: #333;
+        }
+
+        .type-badge {
+            display: inline-block;
+            background: #1c92d2;
+            color: #fff;
+            padding: 6px 12px;
+            margin: 5px 5px;
+            border-radius: 20px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .pokemon-card p {
+            text-align: left;
+            max-width: 400px;
+            margin: 10px auto;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .nav-buttons a button {
+            padding: 10px 20px;
+            background-color: #1c92d2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .nav-buttons a button:hover {
+            background-color: #155a91;
+        }
+
+        @media (max-width: 500px) {
+            .nav-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            select {
+                max-width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
+<div class="container">
+    <h1>Pokémon Info App</h1>
+    <form method="get">
+        <select name="query" onchange="this.form.submit()">
+            <option value="">Select Pokémon</option>
+            <?php if ($pokemonList): ?>
+                <?php foreach ($pokemonList['results'] as $index => $poke): 
+                    $id = $index + 1;
+                    $selected = ($query == $poke['name'] || $query == $id) ? 'selected' : '';
+                ?>
+                    <option value="<?= $id ?>" <?= $selected ?>><?= ucfirst($poke['name']) ?></option>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </select>
+    </form>
 
-    <div class="container">
-        <h1>Pokémon Info App</h1>
+    <?php if ($error): ?>
+        <p class="error"><?= $error ?></p>
+    <?php endif; ?>
 
-        <form method="GET" class="search-box">
-            <input type="text" name="pokemon" placeholder="Enter Pokémon Name or ID" required>
-            <button type="submit">Search</button>
-        </form>
+    <?php if ($pokemonData): ?>
+        <div class="pokemon-card">
+            <img src="<?= $pokemonData['sprites']['front_default'] ?>" alt="<?= $pokemonData['name'] ?>">
+            <h2><?= ucfirst($pokemonData['name']) ?> (ID: <?= $pokemonData['id'] ?>)</h2>
 
-        <?php if (isset($error)) : ?>
-            <p class="error"><?php echo $error; ?></p>
-        <?php else : ?>
-            <h2><?php echo $name; ?> (#<?php echo $id; ?>)</h2>
-            <img src="<?php echo $image; ?>" alt="<?php echo $name; ?>">
-            <p><strong>Types:</strong> <?php echo implode(", ", $types); ?></p>
+            <p><strong>Types:</strong><br>
+                <?php foreach ($pokemonData['types'] as $type): ?>
+                    <span class="type-badge"><?= ucfirst($type['type']['name']) ?></span>
+                <?php endforeach; ?>
+            </p>
 
-            <div class="stats">
-                <h3>Stats</h3>
-                <ul>
-                    <?php foreach ($stats as $key => $value) : ?>
-                        <li><strong><?php echo ucfirst($key); ?>:</strong> <?php echo $value; ?></li>
-                    <?php endforeach; ?>
-                </ul>
+            <p><strong>Stats:</strong><br>
+                <?php foreach ($pokemonData['stats'] as $stat): ?>
+                    <?= ucfirst($stat['stat']['name']) ?>: <?= $stat['base_stat'] ?><br>
+                <?php endforeach; ?>
+            </p>
+
+            <div class="nav-buttons">
+                <?php if ($pokemonData['id'] > 1): ?>
+                    <a href="?query=<?= $pokemonData['id'] - 1 ?>"><button>&larr; Previous</button></a>
+                <?php else: ?>
+                    <span></span>
+                <?php endif; ?>
+                <?php if ($pokemonData['id'] < 151): ?>
+                    <a href="?query=<?= $pokemonData['id'] + 1 ?>"><button>Next &rarr;</button></a>
+                <?php endif; ?>
             </div>
-
-            <div class="nav">
-                <a href="?pokemon=<?php echo $prevId; ?>">⬅ Previous</a>
-                <a href="?pokemon=<?php echo $nextId; ?>">Next ➡</a>
-            </div>
-        <?php endif; ?>
-
-    </div>
-
+        </div>
+    <?php endif; ?>
+</div>
 </body>
 </html>
